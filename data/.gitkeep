@@ -1,0 +1,2 @@
+# Dataset files are downloaded here automatically by running: python ids/train.py
+# Raw NSL-KDD files and processed numpy arrays are ignored by .gitignore.

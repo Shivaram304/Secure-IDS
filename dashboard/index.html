@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureNet IDS v2 | XAI + Zero-Day + Feature Pruning</title>
+  <meta name="description"
+        content="Explainable ML Intrusion Detection System with SHAP, Autoencoder zero-day detection, and SHAP-guided feature pruning." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <a class="navbar-brand" href="#">
+      <div class="brand-icon">&#128737;</div>
+      <div>
+        <span class="brand-text">SecureNet IDS v2</span>
+        <span class="brand-sub">XAI + Zero-Day + Feature Pruning</span>
+      </div>
+    </a>
+    <div class="navbar-right">
+      <div class="status-pill offline" id="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">OFFLINE</span>
+      </div>
+      <button class="btn btn-primary" id="btn-start">&#9654; Start Capture</button>
+      <button class="btn btn-danger" id="btn-stop" disabled>&#9632; Stop</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main-content">
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card" style="--card-accent:var(--accent-blue)">
+        <div class="kpi-icon" style="background:rgba(59,130,246,0.15)">&#128225;</div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpi-total">0</div>
+          <div class="kpi-label">Total Packets</div>
+          <div class="kpi-delta delta-flat">Live counter</div>
+        </div>
+      </div>
+      <div class="kpi-card" style="--card-accent:var(--sev-critical)">
+        <div class="kpi-icon" style="background:rgba(239,68,68,0.15)">&#9889;</div>
+        <div class="kpi-body">
+          <div class="kpi-value text-red" id="kpi-attacks">0</div>
+          <div class="kpi-label">Attacks Detected</div>
+          <div class="kpi-delta delta-up">Ensemble RF+DNN</div>
+        </div>
+      </div>
+      <div class="kpi-card" style="--card-accent:var(--accent-yellow)">
+        <div class="kpi-icon" style="background:rgba(245,158,11,0.15)">&#128202;</div>
+        <div class="kpi-body">
+          <div class="kpi-value text-yellow" id="kpi-rate">0.0%</div>
+          <div class="kpi-label">Attack Rate</div>
+          <div class="kpi-delta delta-flat">% of all traffic</div>
+        </div>
+      </div>
+      <div class="kpi-card" style="--card-accent:var(--accent-green)">
+        <div class="kpi-icon" style="background:rgba(16,185,129,0.15)">&#9989;</div>
+        <div class="kpi-body">
+          <div class="kpi-value text-green" id="kpi-normal">0</div>
+          <div class="kpi-label">Normal Traffic</div>
+          <div class="kpi-delta delta-down">Clean connections</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Traffic + Attack Distribution -->
+    <div class="chart-grid">
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title"><span class="card-title-icon">&#128200;</span> Traffic Timeline</span>
+          <span class="text-muted" style="font-size:0.75rem">Last 60 seconds</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="traffic-chart"></canvas>
+        </div>
+      </div>
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title"><span class="card-title-icon">&#127919;</span> Attack Distribution</span>
+        </div>
+        <div class="donut-wrap">
+          <canvas id="donut-chart"></canvas>
+        </div>
+        <div class="donut-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div><span class="legend-label">Normal</span><span class="legend-count" id="legend-normal">0</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span class="legend-label">DoS</span><span class="legend-count" id="legend-dos">0</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span class="legend-label">Probe</span><span class="legend-count" id="legend-probe">0</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div><span class="legend-label">R2L</span><span class="legend-count" id="legend-r2l">0</span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div><span class="legend-label">U2R</span><span class="legend-count" id="legend-u2r">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== UNIQUE FEATURE: LIVE CYBER THREAT WORLD MAP ===== -->
+    <div class="glass-card" style="grid-column: 1 / -1; min-height: 380px;">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="card-title-icon">🌐</span>
+          Live Global Cyber Threat Map
+          <span style="font-size:0.65rem;color:var(--accent-cyan);background:rgba(6,182,212,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">REAL-TIME</span>
+        </span>
+        <span class="text-muted" style="font-size:0.72rem">Geolocated attack traffic beams targeting India (Hyderabad Hub)</span>
+      </div>
+      <div style="position:relative; width:100%; height:320px; background: rgba(5,8,15,0.4); border-radius: var(--radius-md); overflow: hidden;">
+        <canvas id="threat-map-canvas" style="position:absolute; inset:0; width:100%; height:100%;"></canvas>
+        <div style="position:absolute; bottom:10px; right:15px; font-size:0.7rem; color:var(--text-secondary); background:rgba(12,17,32,0.85); padding:4px 10px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); pointer-events:none;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent-red); margin-right:4px;"></span> Active Attack Source
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Feed + Threat + Progress -->
+    <div class="chart-grid">
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title"><span class="card-title-icon">&#128276;</span> Live Alert Feed</span>
+          <div class="alert-controls">
+            <select class="filter-select" id="alert-filter">
+              <option value="all">All Traffic</option>
+              <option value="threats">Threats Only</option>
+              <option value="dos">DoS</option>
+              <option value="probe">Probe</option>
+              <option value="r2l">R2L</option>
+              <option value="u2r">U2R</option>
+              <option value="normal">Normal</option>
+            </select>
+            <button class="btn btn-ghost" onclick="document.getElementById('alert-feed').innerHTML=''">&#128465; Clear</button>
+          </div>
+        </div>
+        <div class="alert-feed" id="alert-feed">
+          <div style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.85rem">
+            &#128269; Waiting for detections...
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="glass-card" style="text-align:center">
+          <div class="card-header" style="justify-content:center">
+            <span class="card-title"><span class="card-title-icon">&#127777;</span> Threat Level</span>
+          </div>
+          <div class="threat-gauge-wrap">
+            <canvas class="threat-gauge-canvas" id="threat-gauge"></canvas>
+            <div class="threat-label text-green" id="threat-label">LOW</div>
+            <div class="threat-pct" id="threat-pct">0.0% attack rate</div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header">
+            <span class="card-title"><span class="card-title-icon">&#128201;</span> Attack Breakdown</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label-row"><span>DoS</span><span id="pct-dos">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="bar-dos" style="width:0%;background:#ef4444"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label-row"><span>Probe</span><span id="pct-probe">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="bar-probe" style="width:0%;background:#f97316"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label-row"><span>R2L</span><span id="pct-r2l">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="bar-r2l" style="width:0%;background:#f59e0b"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label-row"><span>U2R</span><span id="pct-u2r">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="bar-u2r" style="width:0%;background:#8b5cf6"></div></div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header">
+            <span class="card-title"><span class="card-title-icon">&#129302;</span> ML Model Performance</span>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card"><div class="metric-name">Accuracy</div><div class="metric-value text-green">99.5%</div><div class="metric-model">Random Forest</div></div>
+            <div class="metric-card"><div class="metric-name">Accuracy</div><div class="metric-value text-blue">80.4%</div><div class="metric-model">Deep Neural Net</div></div>
+            <div class="metric-card"><div class="metric-name">Ensemble</div><div class="metric-value text-yellow">75.1%</div><div class="metric-model">RF + DNN Voting</div></div>
+            <div class="metric-card"><div class="metric-name">F1-Score</div><div class="metric-value text-green">0.797</div><div class="metric-model">Weighted Avg</div></div>
+            <div class="metric-card"><div class="metric-name">Features</div><div class="metric-value">41</div><div class="metric-model">NSL-KDD</div></div>
+            <div class="metric-card"><div class="metric-name">Classes</div><div class="metric-value">5</div><div class="metric-model">Attack Types</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== UNIQUE FEATURE: AI THREAT ANALYSIS & ATTACKER PROFILES ===== -->
+    <div class="chart-grid">
+      <!-- AI Attack Narrative Engine -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-title-icon">🤖</span>
+            AI Threat Analyst & Incident Narrative
+            <span style="font-size:0.65rem;color:var(--accent-purple);background:rgba(139,92,246,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">EXPLAINABLE AI</span>
+          </span>
+          <span class="text-muted" style="font-size:0.72rem">Rule-driven natural language narrative explaining how & why</span>
+        </div>
+        <div id="narrative-panel-content" style="display:flex; flex-direction:column; gap:0.75rem; min-height: 280px; justify-content: center;">
+          <div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;padding:2rem;">
+            🔍 Click any alert in the live feed to generate instant AI description, MITRE ATT&CK mappings, and response recommendations.
+          </div>
+        </div>
+      </div>
+
+      <!-- Known Adversaries & predictions -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-title-icon">🕵️</span>
+            Active Adversaries & Predicted Moves
+            <span style="font-size:0.65rem;color:var(--accent-yellow);background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">PROFILER</span>
+          </span>
+        </div>
+        <div id="adversary-profiles-list" style="display:flex; flex-direction:column; gap:0.75rem; max-height:280px; overflow-y:auto; padding-right:4px;">
+          <div style="text-align:center;color:var(--text-secondary);font-size:0.82rem;padding:2rem;">
+            Waiting for profiling data...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== NOVELTY ROW 1: SHAP + Zero-Day ===== -->
+    <div class="chart-grid">
+
+      <!-- SHAP Feature Importance Chart -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-title-icon">&#128300;</span>
+            SHAP Global Feature Importance
+            <span style="font-size:0.65rem;color:var(--accent-purple);background:rgba(139,92,246,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">XAI</span>
+          </span>
+          <span class="text-muted" style="font-size:0.72rem">Top 10 by |SHAP|</span>
+        </div>
+        <div class="chart-canvas-wrap" style="height:280px">
+          <canvas id="shap-chart"></canvas>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;text-align:center">
+          Shapley values (game theory) explain each feature's causal contribution to attack classification
+        </p>
+      </div>
+
+      <!-- Zero-Day Anomaly Detector -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-title-icon">&#129440;</span>
+            Zero-Day Anomaly Detector
+            <span style="font-size:0.65rem;color:var(--sev-critical);background:rgba(239,68,68,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">AUTOENCODER</span>
+          </span>
+        </div>
+        <div style="text-align:center;margin-bottom:1rem">
+          <div style="position:relative;width:160px;height:90px;margin:0 auto">
+            <canvas id="anomaly-gauge"></canvas>
+          </div>
+          <div id="anomaly-score-val" style="font-size:2.2rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--accent-green);line-height:1;margin-top:0.25rem">0</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">Anomaly Score (0-100)</div>
+          <div id="zero-day-risk" style="margin-top:0.5rem;font-size:0.85rem;font-weight:700;letter-spacing:1px;color:var(--accent-green)">LOW RISK</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
+          <div class="metric-card">
+            <div class="metric-name">AE Accuracy</div>
+            <div class="metric-value text-blue" id="ae-accuracy">--</div>
+            <div class="metric-model">Binary detection</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">AE Recall</div>
+            <div class="metric-value text-yellow" id="ae-recall">--</div>
+            <div class="metric-model">Attacks caught</div>
+          </div>
+          <div class="metric-card" style="grid-column:1/-1">
+            <div class="metric-name">Zero-Day Alerts This Session</div>
+            <div class="metric-value text-red" id="zeroday-count">0</div>
+            <div class="metric-model">Anomalies above threshold</div>
+          </div>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.75rem;text-align:center">
+          Trained on normal traffic only. High reconstruction error = potential zero-day attack.
+        </p>
+      </div>
+
+    </div><!-- /novelty row 1 -->
+
+    <!-- ===== NOVELTY ROW 2: SHAP Feature Pruning ===== -->
+    <div class="glass-card">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="card-title-icon">&#9986;</span>
+          SHAP-Guided Feature Pruning: Full (41) vs Lite (15) Model
+          <span style="font-size:0.65rem;color:var(--accent-cyan);background:rgba(6,182,212,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">NOVEL</span>
+        </span>
+        <span class="text-muted" style="font-size:0.72rem">Top-15 features selected by Shapley importance</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem">
+        <div class="metric-card" style="border-color:rgba(59,130,246,0.3)">
+          <div class="metric-name">Full Model</div>
+          <div class="metric-value text-blue" id="full-acc">--</div>
+          <div class="metric-model">41 features</div>
+        </div>
+        <div class="metric-card" style="border-color:rgba(16,185,129,0.3)">
+          <div class="metric-name">Lite Model</div>
+          <div class="metric-value text-green" id="lite-acc">--</div>
+          <div class="metric-model">15 features</div>
+        </div>
+        <div class="metric-card" style="border-color:rgba(245,158,11,0.3)">
+          <div class="metric-name">Speedup</div>
+          <div class="metric-value text-yellow" id="speedup-val">--</div>
+          <div class="metric-model">Faster inference</div>
+        </div>
+        <div class="metric-card" style="border-color:rgba(239,68,68,0.3)">
+          <div class="metric-name">Accuracy Drop</div>
+          <div class="metric-value text-red" id="acc-drop">--</div>
+          <div class="metric-model">Minimal loss</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-bottom:0.5rem">Top-15 SHAP-Selected Features (Lite Model)</div>
+      <div id="lite-features-list" style="display:flex;flex-wrap:wrap;gap:0.4rem">
+        <span style="color:var(--text-muted);font-size:0.8rem">Run train.py to load features...</span>
+      </div>
+    </div>
+
+    <!-- ===== UNIQUE FEATURE: ADVERSARIAL ATTACK SIMULATOR ===== -->
+    <div class="glass-card">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="card-title-icon">🤼</span>
+          Adversarial Attack Simulation & Model Robustness
+          <span style="font-size:0.65rem;color:var(--accent-red);background:rgba(239,68,68,0.12);padding:2px 8px;border-radius:999px;margin-left:6px">ROBUSTNESS</span>
+        </span>
+        <button class="btn btn-ghost" id="btn-simulate-adv" style="font-size:0.75rem; padding: 4px 10px;">
+          ⚡ Trigger Simulation Evasion
+        </button>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:1.5rem; min-height: 200px;">
+        <div style="display:flex; flex-direction:column; justify-content:center; gap:0.75rem;">
+          <div style="font-size:0.8rem; color:var(--text-secondary);">
+            Adversarial attacks (e.g. FGSM) mutate packets by shifting continuous values to bypass the classification. The ensemble voting defends the model:
+          </div>
+          <div class="metric-card" style="border-color:rgba(139,92,246,0.3)">
+            <div class="metric-name">Ensemble Resilience</div>
+            <div class="metric-value text-purple" id="adv-ensemble-resilience">--</div>
+            <div class="metric-model">Adversarial defense rate</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.5rem; justify-content:center;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="metric-card">
+              <div class="metric-name">DNN Evasion Rate</div>
+              <div class="metric-value text-red" id="adv-dnn-evasion">--</div>
+              <div class="metric-model" id="adv-dnn-acc-lbl">DNN accuracy drop</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-name">RF Evasion Rate</div>
+              <div class="metric-value text-yellow" id="adv-rf-evasion">--</div>
+              <div class="metric-model" id="adv-rf-acc-lbl">RF accuracy drop</div>
+            </div>
+          </div>
+          <div id="adv-verdict-box" style="padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.78rem; font-weight: 500; text-align: center; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: var(--accent-green); transition: var(--transition);">
+            Ensemble model is highly robust against adversarial perturbations.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="toast-container" id="toast-container"></div>
+
+</div><!-- /app-wrapper -->
+<script src="js/dashboard.js"></script>
+</body>
+</html>
